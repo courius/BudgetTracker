@@ -5,7 +5,7 @@ import {
   TX,
   TX_SHEET_ID,
   createSpreadsheetBody,
-  expenseToRow,
+  expenseToCells,
   formattingRequests,
   summaryValues,
 } from './sheetLayout';
@@ -73,12 +73,21 @@ export async function readIds(token: string, spreadsheetId: string): Promise<str
 
 export async function appendExpenses(token: string, spreadsheetId: string, expenses: Expense[]): Promise<void> {
   if (expenses.length === 0) return;
-  const range = encodeURIComponent(`${TX}!A:${ID_COLUMN}`);
-  await call(
-    token,
-    `${SHEETS}/${spreadsheetId}/values/${range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
-    { method: 'POST', body: { values: expenses.map(expenseToRow) } },
-  );
+  // appendCells writes after the last row that has data and sets each cell's format explicitly.
+  await call(token, `${SHEETS}/${spreadsheetId}:batchUpdate`, {
+    method: 'POST',
+    body: {
+      requests: [
+        {
+          appendCells: {
+            sheetId: TX_SHEET_ID,
+            rows: expenses.map(expenseToCells),
+            fields: 'userEnteredValue,userEnteredFormat',
+          },
+        },
+      ],
+    },
+  });
 }
 
 /** Deletes sheet rows by zero-based index into the data rows (as returned by readIds). */

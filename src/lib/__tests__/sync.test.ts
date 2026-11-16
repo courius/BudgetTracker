@@ -1,5 +1,5 @@
 import { pressKey } from '../../components/Keypad';
-import { expenseToRow, formattingRequests, summaryValues } from '../sheetLayout';
+import { expenseToCells, formattingRequests, summaryValues } from '../sheetLayout';
 import { planSync } from '../sync';
 import type { Expense, Op } from '../types';
 
@@ -36,8 +36,19 @@ describe('planSync', () => {
 });
 
 describe('sheet layout', () => {
-  it('writes one row per expense in local time', () => {
-    expect(expenseToRow(expense('x'))).toEqual(['2026-11-10', '09:05', 12.5, 'EUR', 'Groceries', 'Need', '', 'manual', 'x']);
+  it('writes dates and times as real values with dark, non-bold text', () => {
+    const cells = expenseToCells(expense('x')).values;
+    // 10 Nov 2026 is serial 46336; 09:05 is 545 minutes into the day.
+    expect(cells[0].userEnteredValue).toEqual({ numberValue: 46336 });
+    expect(cells[1].userEnteredValue).toEqual({ numberValue: 545 / 1440 });
+    expect(cells[2].userEnteredValue).toEqual({ numberValue: 12.5 });
+    expect(cells.slice(3).map((c) => (c.userEnteredValue as { stringValue: string }).stringValue)).toEqual([
+      'EUR', 'Groceries', 'Need', '', 'manual', 'x',
+    ]);
+    for (const c of cells) {
+      const { textFormat } = c.userEnteredFormat as { textFormat: { foregroundColor: { red: number } } };
+      expect(textFormat.foregroundColor.red).toBeLessThan(0.5);
+    }
   });
   it('builds balanced formulas', () => {
     const formulas = summaryValues('EUR')

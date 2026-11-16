@@ -43,15 +43,40 @@ const MONEY = { type: 'NUMBER', pattern: '#,##0.00' };
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
-/** One spreadsheet row per expense, in the phone's local time. */
-export function expenseToRow(e: Expense): (string | number)[] {
-  const d = new Date(e.createdAt);
-  const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  return [date, time, e.amount, e.currency, e.category, e.type, e.note, e.source, e.id];
-}
+const DAY_MS = 86_400_000;
 
-const col = (i: number) => String.fromCharCode(65 + i);
+/**
+ * One fully-formatted spreadsheet row per expense, in the phone's local time.
+ * Every cell carries its own format so a new row never inherits the header's white bold text,
+ * and dates/times are written as real date values rather than text.
+ */
+export function expenseToCells(e: Expense) {
+  const d = new Date(e.createdAt);
+  // Sheets stores dates as days since 30 Dec 1899 and times as a fraction of a day.
+  const dateSerial = (Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - Date.UTC(1899, 11, 30)) / DAY_MS;
+  const timeFraction = (d.getHours() * 60 + d.getMinutes()) / 1440;
+  const text = { foregroundColor: INK, bold: false, italic: false, fontSize: 10 };
+  const quiet = { ...text, foregroundColor: MUTED, fontSize: 9 };
+  const base = { verticalAlignment: 'MIDDLE' };
+  const num = (numberValue: number, userEnteredFormat: object) => ({ userEnteredValue: { numberValue }, userEnteredFormat });
+  const str = (stringValue: string, textFormat: object = text) => ({
+    userEnteredValue: { stringValue },
+    userEnteredFormat: { ...base, textFormat, horizontalAlignment: 'LEFT' },
+  });
+  return {
+    values: [
+      num(dateSerial, { ...base, textFormat: text, horizontalAlignment: 'LEFT', numberFormat: { type: 'DATE', pattern: 'ddd d mmm yyyy' } }),
+      num(timeFraction, { ...base, textFormat: { ...text, foregroundColor: MUTED }, horizontalAlignment: 'LEFT', numberFormat: { type: 'TIME', pattern: 'hh:mm' } }),
+      num(e.amount, { ...base, textFormat: { ...text, bold: true }, horizontalAlignment: 'RIGHT', numberFormat: MONEY }),
+      str(e.currency),
+      str(e.category),
+      str(e.type),
+      str(e.note),
+      str(e.source, quiet),
+      str(e.id, quiet),
+    ],
+  };
+}
 
 function range(sheetId: number, r0: number, r1: number | undefined, c0: number, c1: number | undefined) {
   return {
